@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Farb-Sudoku</title>
+<style>
+  :root {
+    --bg: #1e1e24;
+    --surface: #2a2a33;
+    --text: #e8e8ea;
+    --muted: #8a8a95;
+    --border: #3a3a45;
+    --border-strong: #5a5a6a;
+    --accent: #ffffff;
+    --conflict: #ff3b30;
+    --selected: rgba(255, 255, 255, 0.15);
+    --highlight: rgba(255, 255, 255, 0.06);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 24px 16px;
+    gap: 24px;
+  }
+
+  header {
+    text-align: center;
+  }
+
+  h1 {
+    margin: 0 0 8px;
+    font-size: 28px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+  }
+
+  .subtitle {
+    color: var(--muted);
+    font-size: 14px;
+    margin: 0;
+  }
+
+  .controls {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  button {
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 16px;
+    font-size: 14px;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  button:hover {
+    border-color: var(--border-strong);
+    background: #33333e;
+  }
+
+  button.active {
+    background: var(--text);
+    color: var(--bg);
+    border-color: var(--text);
+  }
+
+  .game {
+    display: flex;
+    gap: 32px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(9, 1fr);
+    grid-template-rows: repeat(9, 1fr);
+    width: min(90vw, 540px);
+    aspect-ratio: 1;
+    background: var(--border-strong);
+    border: 2px solid var(--border-strong);
+    border-radius: 6px;
+    padding: 2px;
+    gap: 1px;
+  }
+
+  .cell {
+    background: var(--surface);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    position: relative;
+    transition: background 0.1s ease;
+    user-select: none;
+  }
+
+  .cell.box-right { margin-right: 2px; }
+  .cell.box-bottom { margin-bottom: 2px; }
+
+  .cell:hover:not(.given) {
+    background: #33333e;
+  }
+
+  .cell.selected {
+    background: var(--selected) !important;
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+    z-index: 2;
+  }
+
+  .cell.highlight {
+    background: var(--highlight);
+  }
+
+  .cell.given {
+    cursor: default;
+  }
+
+  .swatch {
+    width: 70%;
+    height: 70%;
+    border-radius: 50%;
+    transition: transform 0.1s ease;
+  }
+
+  .cell.given .swatch {
+    width: 80%;
+    height: 80%;
+    box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.35);
+  }
+
+  .cell.conflict .swatch {
+    box-shadow: 0 0 0 3px var(--conflict), inset 0 0 0 2px rgba(0, 0, 0, 0.35);
+  }
+
+  .cell.same-color .swatch {
+    transform: scale(1.1);
+  }
+
+  .palette {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    padding: 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+  }
+
+  .palette-swatch {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: transform 0.1s ease, border-color 0.15s ease;
+    position: relative;
+  }
+
+  .palette-swatch:hover {
+    transform: scale(1.08);
+    border-color: var(--accent);
+  }
+
+  .palette-swatch .num {
+    position: absolute;
+    bottom: -18px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .palette-erase {
+    grid-column: span 3;
+    background: var(--bg);
+    color: var(--muted);
+    border: 1px dashed var(--border-strong);
+    border-radius: 8px;
+    padding: 10px;
+    margin-top: 8px;
+    font-size: 13px;
+  }
+
+  .palette-erase:hover {
+    color: var(--text);
+    border-color: var(--text);
+    background: var(--bg);
+  }
+
+  .status {
+    min-height: 24px;
+    font-size: 14px;
+    color: var(--muted);
+    text-align: center;
+  }
+
+  .status.win {
+    color: #4ade80;
+    font-weight: 600;
+    font-size: 16px;
+  }
+
+  .hint {
+    font-size: 12px;
+    color: var(--muted);
+    text-align: center;
+    max-width: 540px;
+  }
+
+  @media (max-width: 640px) {
+    .palette { grid-template-columns: repeat(9, 1fr); gap: 8px; }
+    .palette-swatch { width: 32px; height: 32px; }
+    .palette-swatch .num { display: none; }
+    .palette-erase { grid-column: span 9; }
+  }
+</style>
+</head>
+<body>
+  <header>
+    <h1>Farb-Sudoku</h1>
+    <p class="subtitle">Jede Reihe, Spalte und 3×3-Box muss alle 9 Farben enthalten.</p>
+  </header>
+
+  <div class="controls">
+    <button data-difficulty="easy" class="active">Leicht</button>
+    <button data-difficulty="medium">Mittel</button>
+    <button data-difficulty="hard">Schwer</button>
+    <button id="new-game">Neues Spiel</button>
+  </div>
+
+  <div class="game">
+    <div class="grid" id="grid"></div>
+    <div class="palette" id="palette"></div>
+  </div>
+
+  <div class="status" id="status"></div>
+  <div class="hint">Zelle anklicken, dann Farbe wählen. Tasten 1–9 setzen, 0 / Entf löscht.</div>
+
+<script>
+  const COLORS = [
+    '#e74c3c', // 1 - Rot
+    '#e67e22', // 2 - Orange
+    '#f1c40f', // 3 - Gelb
+    '#8bc34a', // 4 - Hellgrün
+    '#1abc9c', // 5 - Türkis
+    '#3498db', // 6 - Blau
+    '#9b59b6', // 7 - Lila
+    '#e91e63', // 8 - Pink
+    '#795548', // 9 - Braun
+  ];
+
+  const DIFFICULTY = {
+    easy: 36,
+    medium: 49,
+    hard: 56,
+  };
+
+  let currentDifficulty = 'easy';
+  let puzzle = [];       // 9x9, 0 = leer
+  let solution = [];     // 9x9, vollständige Lösung
+  let userGrid = [];     // 9x9, aktueller Spielzustand
+  let givens = [];       // 9x9 bool, true = vorgegeben
+  let selected = null;   // { row, col } | null
+
+  // ---------- Sudoku-Generierung ----------
+
+  function shuffle(arr) {
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+  }
+
+  function isValid(grid, row, col, val) {
+    for (let i = 0; i < 9; i++) {
+      if (grid[row][i] === val) return false;
+      if (grid[i][col] === val) return false;
+    }
+    const bR = Math.floor(row / 3) * 3;
+    const bC = Math.floor(col / 3) * 3;
+    for (let r = bR; r < bR + 3; r++) {
+      for (let c = bC; c < bC + 3; c++) {
+        if (grid[r][c] === val) return false;
+      }
+    }
+    return true;
+  }
+
+  function solve(grid) {
+    for (let row = 0; row < 9; row++) {
+      for (let col = 0; col < 9; col++) {
+        if (grid[row][col] === 0) {
+          const nums = shuffle([1,2,3,4,5,6,7,8,9]);
+          for (const n of nums) {
+            if (isValid(grid, row, col, n)) {
+              grid[row][col] = n;
+              if (solve(grid)) return true;
+              grid[row][col] = 0;
+            }
+          }
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+
+  function generatePuzzle(difficulty) {
+    const grid = Array.from({length: 9}, () => Array(9).fill(0));
+    solve(grid);
+    const sol = grid.map(r => [...r]);
+
+    const indices = Array.from({length: 81}, (_, i) => i);
+    shuffle(indices);
+    const toRemove = DIFFICULTY[difficulty];
+    const puz = grid.map(r => [...r]);
+    for (let i = 0; i < toRemove; i++) {
+      const r = Math.floor(indices[i] / 9);
+      const c = indices[i] % 9;
+      puz[r][c] = 0;
+    }
+    return { puzzle: puz, solution: sol };
+  }
+
+  // ---------- Spiel-State ----------
+
+  function newGame(difficulty) {
+    currentDifficulty = difficulty;
+    const { puzzle: p, solution: s } = generatePuzzle(difficulty);
+    puzzle = p;
+    solution = s;
+    userGrid = p.map(r => [...r]);
+    givens = p.map(r => r.map(v => v !== 0));
+    selected = null;
+    setStatus('');
+    render();
+  }
+
+  function setCell(row, col, val) {
+    if (givens[row][col]) return;
+    userGrid[row][col] = val;
+    render();
+    checkWin();
+  }
+
+  function checkWin() {
+    for (let r = 0; r < 9; r++) {
+      for (let c = 0; c < 9; c++) {
+        if (userGrid[r][c] !== solution[r][c]) return;
+      }
+    }
+    setStatus('Gelöst! Gut gemacht.', true);
+  }
+
+  function findConflicts() {
+    const conflicts = new Set();
+    for (let r = 0; r < 9; r++) {
+      for (let c = 0; c < 9; c++) {
+        const v = userGrid[r][c];
+        if (v === 0) continue;
+        for (let i = 0; i < 9; i++) {
+          if (i !== c && userGrid[r][i] === v) { conflicts.add(r+','+c); conflicts.add(r+','+i); }
+          if (i !== r && userGrid[i][c] === v) { conflicts.add(r+','+c); conflicts.add(i+','+c); }
+        }
+        const bR = Math.floor(r/3)*3, bC = Math.floor(c/3)*3;
+        for (let rr = bR; rr < bR+3; rr++) {
+          for (let cc = bC; cc < bC+3; cc++) {
+            if ((rr !== r || cc !== c) && userGrid[rr][cc] === v) {
+              conflicts.add(r+','+c);
+              conflicts.add(rr+','+cc);
+            }
+          }
+        }
+      }
+    }
+    return conflicts;
+  }
+
+  // ---------- Rendering ----------
+
+  function render() {
+    const gridEl = document.getElementById('grid');
+    gridEl.innerHTML = '';
+    const conflicts = findConflicts();
+    const selectedVal = selected ? userGrid[selected.row][selected.col] : 0;
+
+    for (let r = 0; r < 9; r++) {
+      for (let c = 0; c < 9; c++) {
+        const cell = document.createElement('div');
+        cell.className = 'cell';
+        if (c === 2 || c === 5) cell.classList.add('box-right');
+        if (r === 2 || r === 5) cell.classList.add('box-bottom');
+        if (givens[r][c]) cell.classList.add('given');
+        if (selected && selected.row === r && selected.col === c) cell.classList.add('selected');
+        if (selected && (selected.row === r || selected.col === c ||
+            (Math.floor(selected.row/3) === Math.floor(r/3) && Math.floor(selected.col/3) === Math.floor(c/3)))) {
+          if (!(selected.row === r && selected.col === c)) cell.classList.add('highlight');
+        }
+        if (conflicts.has(r+','+c)) cell.classList.add('conflict');
+
+        const v = userGrid[r][c];
+        if (v !== 0) {
+          const sw = document.createElement('div');
+          sw.className = 'swatch';
+          sw.style.background = COLORS[v - 1];
+          cell.appendChild(sw);
+          if (selectedVal !== 0 && v === selectedVal) cell.classList.add('same-color');
+        }
+
+        cell.addEventListener('click', () => {
+          selected = { row: r, col: c };
+          render();
+        });
+
+        gridEl.appendChild(cell);
+      }
+    }
+
+    renderPalette();
+  }
+
+  function renderPalette() {
+    const pal = document.getElementById('palette');
+    pal.innerHTML = '';
+    for (let i = 0; i < 9; i++) {
+      const sw = document.createElement('div');
+      sw.className = 'palette-swatch';
+      sw.style.background = COLORS[i];
+      const num = document.createElement('span');
+      num.className = 'num';
+      num.textContent = (i + 1).toString();
+      sw.appendChild(num);
+      sw.addEventListener('click', () => {
+        if (selected) setCell(selected.row, selected.col, i + 1);
+      });
+      pal.appendChild(sw);
+    }
+    const erase = document.createElement('button');
+    erase.className = 'palette-erase';
+    erase.textContent = 'Löschen';
+    erase.addEventListener('click', () => {
+      if (selected) setCell(selected.row, selected.col, 0);
+    });
+    pal.appendChild(erase);
+  }
+
+  function setStatus(text, win = false) {
+    const el = document.getElementById('status');
+    el.textContent = text;
+    el.classList.toggle('win', win);
+  }
+
+  // ---------- Input ----------
+
+  document.addEventListener('keydown', (e) => {
+    if (!selected) return;
+    if (e.key >= '1' && e.key <= '9') {
+      setCell(selected.row, selected.col, parseInt(e.key, 10));
+    } else if (e.key === '0' || e.key === 'Delete' || e.key === 'Backspace') {
+      setCell(selected.row, selected.col, 0);
+    } else if (e.key === 'ArrowUp' && selected.row > 0) {
+      selected = { row: selected.row - 1, col: selected.col }; render();
+    } else if (e.key === 'ArrowDown' && selected.row < 8) {
+      selected = { row: selected.row + 1, col: selected.col }; render();
+    } else if (e.key === 'ArrowLeft' && selected.col > 0) {
+      selected = { row: selected.row, col: selected.col - 1 }; render();
+    } else if (e.key === 'ArrowRight' && selected.col < 8) {
+      selected = { row: selected.row, col: selected.col + 1 }; render();
+    }
+  });
+
+  document.querySelectorAll('[data-difficulty]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('[data-difficulty]').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      newGame(btn.dataset.difficulty);
+    });
+  });
+
+  document.getElementById('new-game').addEventListener('click', () => {
+    newGame(currentDifficulty);
+  });
+
+  // Start
+  newGame('easy');
+</script>
+</body>
+</html>
